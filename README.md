@@ -28,7 +28,7 @@ Math.floor(Math.random() * pool.length) // pick a title, every single request
 | Var | Default | What it does |
 |---|---|---|
 | `TMDB_API_KEY` | — | required |
-| `POOL` | `trending` | `trending` \| `now_playing` \| `airing_today` \| `popular` — currently only `trending` is in active use |
+| `POOL` | `trending` | `trending` (TMDB trending/week merged with movie+TV popular, deduped) \| `now_playing` \| `airing_today` \| `popular` — `trending` is the active default |
 | `SHOW_LOGO` | `true` | set `false` to skip the title logo overlay entirely |
 | `OVERLAY_STRENGTH` | `0.72` | 0–1+, base darkness of the gradient/vignette. This is a floor, not a fixed value — see below |
 | `BLUR_SIGMA` | `1.2` | softens the backdrop before darkening; `0` disables. Also shrinks output size a bit (less detail to encode) |

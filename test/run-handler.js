@@ -14,6 +14,21 @@ const trendingResponse = {
   ],
 };
 
+// 'trending' pool now merges in movie/TV popular too — mock those as well.
+const moviePopularResponse = {
+  results: [
+    { id: 4, title: 'Movie Four', backdrop_path: '/four.jpg' },
+    { id: 5, title: 'Movie Five', backdrop_path: '/five.jpg' },
+  ],
+};
+
+const tvPopularResponse = {
+  results: [
+    { id: 6, name: 'Show Six', backdrop_path: '/six.jpg' },
+    { id: 7, name: 'Show Seven', backdrop_path: '/seven.jpg' },
+  ],
+};
+
 const imagesResponse = {
   logos: [
     { file_path: '/logo.png', iso_639_1: 'en', vote_average: 5, width: 500 },
@@ -23,6 +38,12 @@ const imagesResponse = {
 global.fetch = async (url) => {
   if (url.includes('/trending/all/week')) {
     return { ok: true, json: async () => trendingResponse };
+  }
+  if (url.includes('/movie/popular')) {
+    return { ok: true, json: async () => moviePopularResponse };
+  }
+  if (url.includes('/tv/popular')) {
+    return { ok: true, json: async () => tvPopularResponse };
   }
   if (url.includes('/images')) {
     return { ok: true, json: async () => imagesResponse };

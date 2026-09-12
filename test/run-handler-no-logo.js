@@ -18,6 +18,9 @@ global.fetch = async (url) => {
   if (url.includes('/trending/all/week')) {
     return { ok: true, json: async () => trendingResponse };
   }
+  if (url.includes('/movie/popular') || url.includes('/tv/popular')) {
+    return { ok: true, json: async () => ({ results: [] }) };
+  }
   if (url.includes('/images')) {
     return { ok: true, json: async () => ({ logos: [] }) }; // no logos at all
   }
