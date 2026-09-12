@@ -30,10 +30,21 @@ Math.floor(Math.random() * pool.length) // pick a title, every single request
 | `TMDB_API_KEY` | — | required |
 | `POOL` | `trending` | `trending` \| `now_playing` \| `airing_today` \| `popular` — currently only `trending` is in active use |
 | `SHOW_LOGO` | `true` | set `false` to skip the title logo overlay entirely |
-| `OVERLAY_STRENGTH` | `0.55` | 0–1, how dark the gradient/vignette is |
+| `OVERLAY_STRENGTH` | `0.72` | 0–1+, base darkness of the gradient/vignette. This is a floor, not a fixed value — see below |
+| `BLUR_SIGMA` | `1.2` | softens the backdrop before darkening; `0` disables. Also shrinks output size a bit (less detail to encode) |
+| `JPEG_QUALITY` | `84` | output JPEG quality |
+| `BACKDROP_SIZE` | `w1280` | TMDB backdrop size requested — see note below |
 | `BG_WIDTH` / `BG_HEIGHT` | `1920` / `1080` | output canvas size |
 
 `?pool=` overrides the env var per-request too, handy for previewing e.g. `.../api/background?pool=airing_today` in a browser tab without redeploying.
+
+### Readability + pixelation fixes (Sept 2026)
+
+Charles flagged two things on real devices: bright posters (snow, daylight skies) still read poorly behind Nuvio's profile-picker text, and dark scenes looked blocky/pixelated.
+
+**Readability** was a real bug, not just a tuning knob: the darkening gradient was left-side-weighted and fully cleared by 75% of the canvas width, so the right two-thirds of the band where Nuvio actually renders its text (profile row, "Add Profile", "Hold to manage profile") stayed under-darkened on bright backdrops. Two changes: the left gradient's falloff now reaches the far edge instead of clearing early, and `OVERLAY_STRENGTH` is now a *floor* — each request samples the backdrop's actual brightness in that zone (`lib/compose.js: measureUiZoneBrightness`) and boosts the effective strength above the floor when the source is bright enough to need it, capped so it never fully blacks out the image. Verified against a pristine copy of the previous code: a bright synthetic backdrop that measured 69–83/255 in the text zone (unreadable) now measures 18–25/255 (comfortably dark), at roughly the same output size.
+
+**Pixelation**: `BACKDROP_SIZE` was requesting TMDB's `w1920`, which isn't one of TMDB's documented backdrop sizes (`w300`/`w780`/`w1280`/`original`) — an undocumented size risks the CDN quietly resolving to something smaller than our 1920x1080 canvas, which means Sharp was upscaling that into the full frame, and upscaled low-detail source shows up as soft blockiness first in dark, low-contrast scenes. Switched to `w1280`, a real documented size — a modest, predictable 1.5x upscale that the blur pass below smooths over, and a much smaller/faster TMDB fetch than requesting `original` (which can be full 4K for popular titles). A grain/dither layer was also tried as a direct fix for JPEG's own blocky quantization in flat dark gradients (the standard trick for this), but measured against the old pipeline it either did nothing at a size-neutral opacity or needed 2-4x the output bytes to move the needle — not a trade worth making for "stay light." Kept instead: a small blur pass (reduces high-frequency detail *and* shrinks output size) and a modest quality bump (82→84), which gave a real, cheap reduction in visible blocking without the bytes cost. `test/verify-fixes.js` has the before/after numbers if this needs revisiting.
 
 ## Cost
 
