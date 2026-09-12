@@ -4,7 +4,7 @@ const sharp = require('sharp');
 
 const POOL = process.env.POOL || 'trending'; // trending | now_playing | airing_today | popular
 const SHOW_LOGO = process.env.SHOW_LOGO !== 'false';
-const OVERLAY_STRENGTH = Number(process.env.OVERLAY_STRENGTH || 0.55);
+const OVERLAY_STRENGTH = Number(process.env.OVERLAY_STRENGTH || 0.72);
 const BG_WIDTH = Number(process.env.BG_WIDTH || WIDTH);
 const BG_HEIGHT = Number(process.env.BG_HEIGHT || HEIGHT);
 
