@@ -4,7 +4,7 @@
   "private": true,
   "description": "Serverless endpoint that serves a rotating, Netflix-style darkened backdrop with an off-centre title logo, for use as Nuvio's custom profile background URL.",
   "scripts": {
-    "test": "node test/make-test-assets.js && node test/run-compose.js && node test/run-handler.js && node test/run-handler-fallback.js"
+    "test": "node test/make-test-assets.js && node test/run-compose.js && node test/run-handler.js && node test/run-handler-fallback.js && node test/run-handler-no-logo.js"
   },
   "dependencies": {
     "sharp": "^0.33.5"
