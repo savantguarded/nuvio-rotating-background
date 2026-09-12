@@ -6,26 +6,22 @@ process.env.TMDB_API_KEY = 'fake_key_for_test';
 const fakeBackdrop = fs.readFileSync(path.join(__dirname, 'fake-backdrop.jpg'));
 const fakeLogo = fs.readFileSync(path.join(__dirname, 'fake-logo.png'));
 
-const trendingResponse = {
+// 'trending' pool is now US-scoped: trending/movie/week filtered to
+// original_language 'en', trending/tv/week filtered to origin_country
+// including 'US'. Each mock includes one item that should get filtered out,
+// to prove the filter is actually doing something.
+const trendingMovieResponse = {
   results: [
-    { id: 1, name: 'Show One', media_type: 'tv', backdrop_path: '/one.jpg' },
-    { id: 2, title: 'Movie Two', media_type: 'movie', backdrop_path: '/two.jpg' },
-    { id: 3, name: 'Show Three', media_type: 'tv', backdrop_path: '/three.jpg' },
+    { id: 2, title: 'Movie Two', original_language: 'en', backdrop_path: '/two.jpg' },
+    { id: 8, title: 'Movie Non-US', original_language: 'fr', backdrop_path: '/eight.jpg' },
   ],
 };
 
-// 'trending' pool now merges in movie/TV popular too — mock those as well.
-const moviePopularResponse = {
+const trendingTvResponse = {
   results: [
-    { id: 4, title: 'Movie Four', backdrop_path: '/four.jpg' },
-    { id: 5, title: 'Movie Five', backdrop_path: '/five.jpg' },
-  ],
-};
-
-const tvPopularResponse = {
-  results: [
-    { id: 6, name: 'Show Six', backdrop_path: '/six.jpg' },
-    { id: 7, name: 'Show Seven', backdrop_path: '/seven.jpg' },
+    { id: 1, name: 'Show One', origin_country: ['US'], backdrop_path: '/one.jpg' },
+    { id: 3, name: 'Show Three', origin_country: ['US'], backdrop_path: '/three.jpg' },
+    { id: 9, name: 'Show Non-US', origin_country: ['KR'], backdrop_path: '/nine.jpg' },
   ],
 };
 
@@ -36,14 +32,11 @@ const imagesResponse = {
 };
 
 global.fetch = async (url) => {
-  if (url.includes('/trending/all/week')) {
-    return { ok: true, json: async () => trendingResponse };
+  if (url.includes('/trending/movie/week')) {
+    return { ok: true, json: async () => trendingMovieResponse };
   }
-  if (url.includes('/movie/popular')) {
-    return { ok: true, json: async () => moviePopularResponse };
-  }
-  if (url.includes('/tv/popular')) {
-    return { ok: true, json: async () => tvPopularResponse };
+  if (url.includes('/trending/tv/week')) {
+    return { ok: true, json: async () => trendingTvResponse };
   }
   if (url.includes('/images')) {
     return { ok: true, json: async () => imagesResponse };
@@ -100,6 +93,10 @@ async function main() {
   }
   if (resLow.headers['Cache-Control'] !== 'no-store, must-revalidate') {
     throw new Error('expected no-store so every request re-renders (new image on every app open)');
+  }
+  if (resLow.headers['X-Nuvio-BG-Title'] === 'Movie Non-US' || resHigh.headers['X-Nuvio-BG-Title'] === 'Movie Non-US'
+    || resLow.headers['X-Nuvio-BG-Title'] === 'Show Non-US' || resHigh.headers['X-Nuvio-BG-Title'] === 'Show Non-US') {
+    throw new Error('non-US-filtered title was picked — origin filtering is not working');
   }
 
   fs.writeFileSync(path.join(__dirname, 'handler-output.jpg'), resLow.body);

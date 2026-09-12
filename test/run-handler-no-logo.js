@@ -8,18 +8,18 @@ process.env.TMDB_API_KEY = 'fake_key_for_test';
 
 const fakeBackdrop = fs.readFileSync(path.join(__dirname, 'fake-backdrop.jpg'));
 
-const trendingResponse = {
+const trendingTvResponse = {
   results: [
-    { id: 1, name: 'A Title With No Logo Asset', media_type: 'tv', backdrop_path: '/one.jpg' },
+    { id: 1, name: 'A Title With No Logo Asset', origin_country: ['US'], backdrop_path: '/one.jpg' },
   ],
 };
 
 global.fetch = async (url) => {
-  if (url.includes('/trending/all/week')) {
-    return { ok: true, json: async () => trendingResponse };
-  }
-  if (url.includes('/movie/popular') || url.includes('/tv/popular')) {
+  if (url.includes('/trending/movie/week')) {
     return { ok: true, json: async () => ({ results: [] }) };
+  }
+  if (url.includes('/trending/tv/week')) {
+    return { ok: true, json: async () => trendingTvResponse };
   }
   if (url.includes('/images')) {
     return { ok: true, json: async () => ({ logos: [] }) }; // no logos at all
