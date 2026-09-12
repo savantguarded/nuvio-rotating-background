@@ -1,0 +1,7 @@
+node_modules/
+test/fake-backdrop.jpg
+test/fake-logo.png
+test/preview.jpg
+test/handler-output.jpg
+.vercel
+.env*
