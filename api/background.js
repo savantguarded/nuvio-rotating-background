@@ -4,6 +4,11 @@ const sharp = require('sharp');
 
 const POOL = process.env.POOL || 'trending'; // trending | now_playing | airing_today | popular
 const SHOW_LOGO = process.env.SHOW_LOGO !== 'false';
+// Genre + trend tag row under the logo. Sourced from data already present in
+// the TMDB pool response (genre_ids, plus the trending/week list's own order
+// for rank) — no extra TMDB calls. Off switch kept for easy rollback/A-B,
+// same pattern as SHOW_LOGO.
+const SHOW_TAGS = process.env.SHOW_TAGS !== 'false';
 // Sept 14 (later, twice): 0.72 -> 0.8 -> 0.9 — still a floor, not a fixed
 // value, see resolveOverlayStrength() in lib/compose.js for the
 // brightness-adaptive boost on top of this.
@@ -122,6 +127,8 @@ module.exports = async (req, res) => {
       jpegQuality: JPEG_QUALITY,
       blurSigma: BLUR_SIGMA,
       sharpen: SHARPEN,
+      genreNames: SHOW_TAGS ? item.genreNames : [],
+      trendRank: SHOW_TAGS ? item.trendRank : null,
     });
 
     res.setHeader('Content-Type', 'image/jpeg');
@@ -132,6 +139,7 @@ module.exports = async (req, res) => {
     // rather than "new image every N minutes."
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.setHeader('X-Nuvio-BG-Title', item.title || '');
+    res.setHeader('X-Nuvio-BG-Genres', (item.genreNames || []).join(', '));
     res.status(200).send(image);
   } catch (err) {
     console.error('background generation failed, serving fallback:', err);
