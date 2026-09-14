@@ -30,7 +30,7 @@ Math.floor(Math.random() * pool.length) // pick a title, every single request
 | `TMDB_API_KEY` | — | required |
 | `POOL` | `trending` | `trending` (US-only, popularity-sorted — see below) \| `now_playing` \| `airing_today` \| `popular` — `trending` is the active default |
 | `SHOW_LOGO` | `true` | set `false` to skip the title logo overlay entirely |
-| `OVERLAY_STRENGTH` | `0.8` | 0–1+, base darkness of the gradient/vignette. This is a floor, not a fixed value — see below |
+| `OVERLAY_STRENGTH` | `0.9` | 0–1+, base darkness of the gradient/vignette. This is a floor, not a fixed value — see below |
 | `BLUR_SIGMA` | `0.6` | very light softening of the backdrop, mainly to settle JPEG quantization in flat dark scenes; `0` disables. Kept deliberately low — see "Sharpness" below |
 | `SHARPEN` | `true` | applies a mild unsharp mask after resize, to counter the softness a cover-fit resize/re-encode introduces; set `false` to disable |
 | `JPEG_QUALITY` | `86` | output JPEG quality |
@@ -73,7 +73,7 @@ Charles flagged two things on real devices: bright posters (snow, daylight skies
 
 **Readability** was a real bug, not just a tuning knob: the darkening gradient was left-side-weighted and fully cleared by 75% of the canvas width, so the right two-thirds of the band where Nuvio actually renders its text (profile row, "Add Profile", "Hold to manage profile") stayed under-darkened on bright backdrops. Two changes: the left gradient's falloff now reaches the far edge instead of clearing early, and `OVERLAY_STRENGTH` is now a *floor* — each request samples the backdrop's actual brightness in that zone (`lib/compose.js: measureUiZoneBrightness`) and boosts the effective strength above the floor when the source is bright enough to need it, capped so it never fully blacks out the image. Verified against a pristine copy of the previous code: a bright synthetic backdrop that measured 69–83/255 in the text zone (unreadable) now measures 18–25/255 (comfortably dark), at roughly the same output size.
 
-`OVERLAY_STRENGTH` was later nudged from `0.72` to `0.8` (Sept 14, second pass) — Charles asked for slightly more darkness across the board. Still just the floor; the adaptive boost on top is unchanged.
+`OVERLAY_STRENGTH` was later nudged from `0.72` to `0.8`, then to `0.9` (Sept 14, third pass) — Charles asked for more darkness across the board twice in a row. Still just the floor; the adaptive boost on top (capped at 1.35) is unchanged, so a very bright backdrop can still push past 0.9, it just no longer needs to to look reasonably dark.
 
 **Pixelation** (original fix, Sept 12): `BACKDROP_SIZE` was requesting TMDB's `w1920`, which isn't one of TMDB's documented backdrop sizes (`w300`/`w780`/`w1280`/`original`) — an undocumented size risks the CDN quietly resolving to something smaller than our 1920x1080 canvas, which means Sharp was upscaling that into the full frame. Switched to `w1280` at the time, a real documented size but still a 1.5x upscale.
 

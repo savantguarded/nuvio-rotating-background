@@ -4,10 +4,10 @@ const sharp = require('sharp');
 
 const POOL = process.env.POOL || 'trending'; // trending | now_playing | airing_today | popular
 const SHOW_LOGO = process.env.SHOW_LOGO !== 'false';
-// Sept 14 (later): nudged up from 0.72 — still a floor, not a fixed value,
-// see resolveOverlayStrength() in lib/compose.js for the brightness-adaptive
-// boost on top of this.
-const OVERLAY_STRENGTH = Number(process.env.OVERLAY_STRENGTH || 0.8);
+// Sept 14 (later, twice): 0.72 -> 0.8 -> 0.9 — still a floor, not a fixed
+// value, see resolveOverlayStrength() in lib/compose.js for the
+// brightness-adaptive boost on top of this.
+const OVERLAY_STRENGTH = Number(process.env.OVERLAY_STRENGTH || 0.9);
 const BG_WIDTH = Number(process.env.BG_WIDTH || WIDTH);
 const BG_HEIGHT = Number(process.env.BG_HEIGHT || HEIGHT);
 const JPEG_QUALITY = Number(process.env.JPEG_QUALITY || 86);
