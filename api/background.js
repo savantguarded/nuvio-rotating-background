@@ -1,6 +1,12 @@
 const { composeBackground, WIDTH, HEIGHT } = require('../lib/compose');
 const { fetchPool, backdropUrl, fetchLogo } = require('../lib/tmdb');
+const { ensureFontsConfigured } = require('../lib/fonts');
 const sharp = require('sharp');
+
+// renderTextLogo below builds an SVG with text (the no-logo fallback), so
+// fonts need to be set up before it runs too, not just before compose.js's
+// own text layer — see lib/fonts.js.
+ensureFontsConfigured();
 
 const POOL = process.env.POOL || 'trending'; // trending | now_playing | airing_today | popular
 const SHOW_LOGO = process.env.SHOW_LOGO !== 'false';
