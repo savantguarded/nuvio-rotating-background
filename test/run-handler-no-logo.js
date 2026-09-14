@@ -15,6 +15,9 @@ const trendingTvResponse = {
 };
 
 global.fetch = async (url) => {
+  if (url.includes('/discover/movie') || url.includes('/discover/tv')) {
+    return { ok: true, json: async () => ({ results: [] }) };
+  }
   if (url.includes('/trending/movie/week')) {
     return { ok: true, json: async () => ({ results: [] }) };
   }

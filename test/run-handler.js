@@ -6,22 +6,47 @@ process.env.TMDB_API_KEY = 'fake_key_for_test';
 const fakeBackdrop = fs.readFileSync(path.join(__dirname, 'fake-backdrop.jpg'));
 const fakeLogo = fs.readFileSync(path.join(__dirname, 'fake-logo.png'));
 
-// 'trending' pool is now US-scoped: trending/movie/week filtered to
-// original_language 'en', trending/tv/week filtered to origin_country
-// including 'US'. Each mock includes one item that should get filtered out,
-// to prove the filter is actually doing something.
+// 'trending' pool is now built from discover/movie + discover/tv (both
+// with_origin_country=US, popularity-sorted, pages 1-2 — the "expand it but
+// keep it US-only and most-popular" pool), topped up with trending/week for
+// freshness (a trending movie only counts if its id is also in the discover
+// set; trending TV is filtered by its own origin_country like before).
+// Each mock includes one item that should get filtered out, to prove the
+// filters are actually doing something.
+const discoverMoviesP1 = {
+  results: [
+    { id: 2, title: 'Movie Two', backdrop_path: '/two.jpg' },
+    { id: 4, title: 'Movie Four', backdrop_path: '/four.jpg' },
+  ],
+};
+const discoverMoviesP2 = {
+  results: [
+    { id: 6, title: 'Movie Six', backdrop_path: '/six.jpg' },
+  ],
+};
+const discoverTvP1 = {
+  results: [
+    { id: 1, name: 'Show One', backdrop_path: '/one.jpg' },
+  ],
+};
+const discoverTvP2 = {
+  results: [
+    { id: 3, name: 'Show Three', backdrop_path: '/three.jpg' },
+  ],
+};
+
 const trendingMovieResponse = {
   results: [
-    { id: 2, title: 'Movie Two', original_language: 'en', backdrop_path: '/two.jpg' },
-    { id: 8, title: 'Movie Non-US', original_language: 'fr', backdrop_path: '/eight.jpg' },
+    { id: 2, title: 'Movie Two', original_language: 'en', backdrop_path: '/two.jpg' }, // in discover -> kept (dedup'd)
+    { id: 8, title: 'Movie Not In Discover', original_language: 'en', backdrop_path: '/eight.jpg' }, // not in discover -> filtered
   ],
 };
 
 const trendingTvResponse = {
   results: [
-    { id: 1, name: 'Show One', origin_country: ['US'], backdrop_path: '/one.jpg' },
-    { id: 3, name: 'Show Three', origin_country: ['US'], backdrop_path: '/three.jpg' },
-    { id: 9, name: 'Show Non-US', origin_country: ['KR'], backdrop_path: '/nine.jpg' },
+    { id: 1, name: 'Show One', origin_country: ['US'], backdrop_path: '/one.jpg' }, // dup, dedup'd
+    { id: 3, name: 'Show Three', origin_country: ['US'], backdrop_path: '/three.jpg' }, // dup, dedup'd
+    { id: 9, name: 'Show Non-US', origin_country: ['KR'], backdrop_path: '/nine.jpg' }, // filtered
   ],
 };
 
@@ -32,6 +57,18 @@ const imagesResponse = {
 };
 
 global.fetch = async (url) => {
+  if (url.includes('/discover/movie') && url.includes('page=1')) {
+    return { ok: true, json: async () => discoverMoviesP1 };
+  }
+  if (url.includes('/discover/movie') && url.includes('page=2')) {
+    return { ok: true, json: async () => discoverMoviesP2 };
+  }
+  if (url.includes('/discover/tv') && url.includes('page=1')) {
+    return { ok: true, json: async () => discoverTvP1 };
+  }
+  if (url.includes('/discover/tv') && url.includes('page=2')) {
+    return { ok: true, json: async () => discoverTvP2 };
+  }
   if (url.includes('/trending/movie/week')) {
     return { ok: true, json: async () => trendingMovieResponse };
   }
@@ -94,9 +131,9 @@ async function main() {
   if (resLow.headers['Cache-Control'] !== 'no-store, must-revalidate') {
     throw new Error('expected no-store so every request re-renders (new image on every app open)');
   }
-  if (resLow.headers['X-Nuvio-BG-Title'] === 'Movie Non-US' || resHigh.headers['X-Nuvio-BG-Title'] === 'Movie Non-US'
-    || resLow.headers['X-Nuvio-BG-Title'] === 'Show Non-US' || resHigh.headers['X-Nuvio-BG-Title'] === 'Show Non-US') {
-    throw new Error('non-US-filtered title was picked — origin filtering is not working');
+  const filteredTitles = ['Movie Not In Discover', 'Show Non-US'];
+  if (filteredTitles.includes(resLow.headers['X-Nuvio-BG-Title']) || filteredTitles.includes(resHigh.headers['X-Nuvio-BG-Title'])) {
+    throw new Error('a title that should have been filtered out (non-US, or not in the discover-popular set) was picked');
   }
 
   fs.writeFileSync(path.join(__dirname, 'handler-output.jpg'), resLow.body);

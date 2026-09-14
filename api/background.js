@@ -7,18 +7,32 @@ const SHOW_LOGO = process.env.SHOW_LOGO !== 'false';
 const OVERLAY_STRENGTH = Number(process.env.OVERLAY_STRENGTH || 0.72);
 const BG_WIDTH = Number(process.env.BG_WIDTH || WIDTH);
 const BG_HEIGHT = Number(process.env.BG_HEIGHT || HEIGHT);
-const JPEG_QUALITY = Number(process.env.JPEG_QUALITY || 84);
-const BLUR_SIGMA = Number(process.env.BLUR_SIGMA ?? 1.4);
+const JPEG_QUALITY = Number(process.env.JPEG_QUALITY || 86);
+// Sept 14 fix: the old 1.2-1.4 blur sigma was a real, visible softening (not
+// just a "settle JPEG blockiness" nudge — measured A/B, sigma >= ~0.6 is the
+// point libvips' gaussian blur starts doing anything detectable at all at
+// this resolution, and 1.4 was well past that). Combined with the w1280
+// upscale below, that was the actual source of the "blurry" complaint.
+// Dropped to a light 0.6 — enough to still smooth flat-gradient JPEG
+// quantization in dark scenes, effectively invisible as "blur" — and paired
+// with a sharpen pass (SHARPEN below) to counter the softness a cover-fit
+// resize/re-encode naturally introduces, so detail stays crisp.
+const BLUR_SIGMA = Number(process.env.BLUR_SIGMA ?? 0.6);
+const SHARPEN = process.env.SHARPEN !== 'false';
 
 // TMDB's documented backdrop sizes are w300 / w780 / w1280 / original — there
-// is no "w1920". Requesting an undocumented size risks the CDN silently
-// resolving to something smaller than our 1920x1080 canvas, which means
-// sharp upscales it to fill the frame — exactly what shows up as soft,
-// blocky pixelation in dark scenes. w1280 is a real size, and a modest
-// 1.5x upscale is fully masked by the blur/overlay/grain pipeline below, so
-// this stays both correct and light (a w1280 JPEG is a fraction of the size
-// of "original", which can be full 4K for popular titles).
-const BACKDROP_SIZE = process.env.BACKDROP_SIZE || 'w1280';
+// is no "w1920". w1280 was chosen over "original" specifically to avoid a
+// big source download, but that meant every backdrop got upscaled ~1.5x to
+// fill our 1920x1080 canvas before any blur was even applied — upscaling is
+// inherently soft, and that softness is what the "sharp, not blurry, not too
+// large" fix below actually targets. "original" is TMDB's true source
+// resolution (typically >=1920px wide for anything popular enough to be in
+// this pool), so sharp only ever downsamples to fill the canvas, which is
+// the sharper direction. The extra bytes are on the TMDB->Vercel fetch, not
+// the delivered image: output size is governed by BG_WIDTH/BG_HEIGHT and
+// JPEG_QUALITY below either way, since sharp always re-encodes at the target
+// canvas size.
+const BACKDROP_SIZE = process.env.BACKDROP_SIZE || 'original';
 
 // A plain dark gradient generated on the fly, used only if TMDB/network fails
 // entirely, so Nuvio's background never breaks even if this service hiccups.
@@ -104,6 +118,7 @@ module.exports = async (req, res) => {
       overlayStrength: OVERLAY_STRENGTH,
       jpegQuality: JPEG_QUALITY,
       blurSigma: BLUR_SIGMA,
+      sharpen: SHARPEN,
     });
 
     res.setHeader('Content-Type', 'image/jpeg');
