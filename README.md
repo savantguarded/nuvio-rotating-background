@@ -30,7 +30,7 @@ Math.floor(Math.random() * pool.length) // pick a title, every single request
 | `TMDB_API_KEY` | — | required |
 | `POOL` | `trending` | `trending` (US-only, popularity-sorted — see below) \| `now_playing` \| `airing_today` \| `popular` — `trending` is the active default |
 | `SHOW_LOGO` | `true` | set `false` to skip the title logo overlay entirely |
-| `OVERLAY_STRENGTH` | `0.72` | 0–1+, base darkness of the gradient/vignette. This is a floor, not a fixed value — see below |
+| `OVERLAY_STRENGTH` | `0.8` | 0–1+, base darkness of the gradient/vignette. This is a floor, not a fixed value — see below |
 | `BLUR_SIGMA` | `0.6` | very light softening of the backdrop, mainly to settle JPEG quantization in flat dark scenes; `0` disables. Kept deliberately low — see "Sharpness" below |
 | `SHARPEN` | `true` | applies a mild unsharp mask after resize, to counter the softness a cover-fit resize/re-encode introduces; set `false` to disable |
 | `JPEG_QUALITY` | `86` | output JPEG quality |
@@ -49,11 +49,31 @@ It now merges two layers:
 
 Everything is deduped by `mediaType:id` before a title's picked. Net effect: the pool went from ~30-40 US-filtered items to on the order of 100+, while every item in it is still either a popularity-sorted US discover result or a US-confirmed trending one — no widening of "US only" or "most popular," just more titles within those two constraints.
 
+### Excluding non-show TV/movie bloat (Sept 14, second pass)
+
+Charles flagged talk shows showing up in the pool. TMDB's US-scoped popularity charts regularly surface long-running talk shows, news programs, reality/game shows, and soaps — real ratings winners, but not "a show" in the Netflix-picker sense, and their images are usually a stage photo or title card rather than the kind of backdrop this is for. Same issue on the movie side with "TV Movie" (made-for-TV specials, reunions, concert films) occasionally cracking the popularity charts.
+
+Two layers, since `trending/*` doesn't support genre filtering server-side but `discover/*` does:
+- `/discover/movie` and `/discover/tv` now also send `without_genres` — `10770` (TV Movie) for movies, `10763,10764,10766,10767` (News, Reality, Soap, Talk) for TV — so TMDB excludes them before they ever take up one of the popularity-sorted slots.
+- A client-side check on `genre_ids` (present on every TMDB list result) is applied to *every* item regardless of source, as the backstop for `trending/*` and a safety net in case a bloat title slips past the server-side filter some other way.
+
+### Faster load, and pool caching (Sept 14, second pass)
+
+Charles reported ~2-3s load time. The pool-expansion fix above meant every single request fired 6 TMDB list calls (4 discover pages + 2 trending) before it could even pick a title — the biggest chunk of that latency, and almost entirely wasted, since the pool composition doesn't meaningfully change minute to minute.
+
+Fixed by caching, mirroring the existing best-effort `lastPickedId` in-memory pattern (per warm Lambda instance, not durable across cold starts — fine for personal single-instance traffic):
+- The assembled pool (`fetchPool` in `lib/tmdb.js`) is cached for 10 minutes. Most requests now skip straight from "warm instance" to "pick + render" with zero TMDB list calls.
+- A title's logo lookup (`fetchLogo`) is cached for 1 hour, so re-picking a title already seen in that window skips the `/images` metadata call too.
+
+Neither changes what gets served — the pool itself, and any given title's logo, don't need to be millisecond-fresh — only how often TMDB gets asked for them. `BACKDROP_SIZE=original` (the Sept 14 sharpness fix) and the actual image render are unchanged and still run per-request, since those *do* need to vary every time.
+
 ### Readability + pixelation fixes (Sept 2026)
 
 Charles flagged two things on real devices: bright posters (snow, daylight skies) still read poorly behind Nuvio's profile-picker text, and dark scenes looked blocky/pixelated.
 
 **Readability** was a real bug, not just a tuning knob: the darkening gradient was left-side-weighted and fully cleared by 75% of the canvas width, so the right two-thirds of the band where Nuvio actually renders its text (profile row, "Add Profile", "Hold to manage profile") stayed under-darkened on bright backdrops. Two changes: the left gradient's falloff now reaches the far edge instead of clearing early, and `OVERLAY_STRENGTH` is now a *floor* — each request samples the backdrop's actual brightness in that zone (`lib/compose.js: measureUiZoneBrightness`) and boosts the effective strength above the floor when the source is bright enough to need it, capped so it never fully blacks out the image. Verified against a pristine copy of the previous code: a bright synthetic backdrop that measured 69–83/255 in the text zone (unreadable) now measures 18–25/255 (comfortably dark), at roughly the same output size.
+
+`OVERLAY_STRENGTH` was later nudged from `0.72` to `0.8` (Sept 14, second pass) — Charles asked for slightly more darkness across the board. Still just the floor; the adaptive boost on top is unchanged.
 
 **Pixelation** (original fix, Sept 12): `BACKDROP_SIZE` was requesting TMDB's `w1920`, which isn't one of TMDB's documented backdrop sizes (`w300`/`w780`/`w1280`/`original`) — an undocumented size risks the CDN quietly resolving to something smaller than our 1920x1080 canvas, which means Sharp was upscaling that into the full frame. Switched to `w1280` at the time, a real documented size but still a 1.5x upscale.
 
