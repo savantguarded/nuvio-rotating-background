@@ -136,8 +136,20 @@ async function main() {
     throw new Error('a title that should have been filtered out (non-US, or not in the discover-popular set) was picked');
   }
 
+  // Sept 23: X-Nuvio-BG-Timing lets a live before/after cold-vs-warm check be
+  // done from just the response headers (see the doc comment in
+  // api/background.js). Just checking it's present and has the expected
+  // phases — actual timing values aren't meaningful against fake in-process fetches.
+  const timingHeader = resLow.headers['X-Nuvio-BG-Timing'] || '';
+  console.log('timing header:', timingHeader);
+  for (const phase of ['pool', 'images', 'compose', 'total']) {
+    if (!timingHeader.includes(`${phase}=`)) {
+      throw new Error(`expected X-Nuvio-BG-Timing to include a "${phase}=" entry, got: ${timingHeader}`);
+    }
+  }
+
   fs.writeFileSync(path.join(__dirname, 'handler-output.jpg'), resLow.body);
-  console.log('OK — different random values pick different titles, response is never cached');
+  console.log('OK — different random values pick different titles, response is never cached, timing header present');
 }
 
 main().catch((e) => { console.error('TEST FAILED:', e); process.exit(1); });

@@ -33,6 +33,17 @@ const JPEG_QUALITY = Number(process.env.JPEG_QUALITY || 86);
 // resize/re-encode naturally introduces, so detail stays crisp.
 const BLUR_SIGMA = Number(process.env.BLUR_SIGMA ?? 0.6);
 const SHARPEN = process.env.SHARPEN !== 'false';
+// Ordered-dither anti-banding pass on the darkening overlay's alpha channel
+// (Sept 23) — see ditherOverlayAlpha() in lib/compose.js for the mechanism
+// and its doc comment for a measured (not assumed) cost breakdown: cheaper
+// than the random-noise version a prior session rejected, but not free —
+// output size on real dark content is unverified from this sandbox (no live
+// TMDB access here). Shipped ON by default per Charles's explicit ask, but
+// worth a live before/after file-size check (a few curl'd sizes with
+// DITHER=true vs false against a real dark title) alongside the visual
+// spot-check — flip this to 'false' if it turns out costly on real
+// backdrops rather than the synthetic ones this was tested against.
+const DITHER = process.env.DITHER !== 'false';
 
 // TMDB's documented backdrop sizes are w300 / w780 / w1280 / original — there
 // is no "w1920". w1280 was chosen over "original" specifically to avoid a
@@ -46,6 +57,18 @@ const SHARPEN = process.env.SHARPEN !== 'false';
 // the delivered image: output size is governed by BG_WIDTH/BG_HEIGHT and
 // JPEG_QUALITY below either way, since sharp always re-encodes at the target
 // canvas size.
+//
+// Reassessed Sept 23 as a latency lever (given SHARPEN now exists, could a
+// smaller size trade a little sharpness for a faster download?) and
+// deliberately left unchanged: SHARPEN's unsharp mask compensates for the
+// softness a cover-fit *downsample* re-encode introduces, not for upscale
+// interpolation loss. Requesting a size smaller than the 1920x1080 canvas
+// (e.g. w1280) would force the same upscale this env var exists to avoid,
+// regardless of any sharpen pass on top — reverting it would just
+// reintroduce the original "blurry" complaint this fixed. If per-request
+// latency is still a problem after the pool/logo caching and warm-keeping
+// already in place, the safe lever is fewer discover pages (see fetchPool in
+// lib/tmdb.js), not this.
 const BACKDROP_SIZE = process.env.BACKDROP_SIZE || 'original';
 
 // A plain dark gradient generated on the fly, used only if TMDB/network fails
@@ -106,26 +129,55 @@ function pickIndexAvoidingRepeat(items) {
 }
 
 module.exports = async (req, res) => {
+  // Sept 23: lightweight per-phase timing, surfaced as a response header
+  // rather than a log line, so it's checkable from the live endpoint (e.g.
+  // curl -I) without needing Vercel log access. Overhead is a handful of
+  // Date.now() calls — negligible next to the network waits being measured.
+  const t0 = Date.now();
+  const timing = {};
+  const mark = (label, since) => { timing[label] = Date.now() - since; };
+
   try {
     const pool = (req.query && req.query.pool) || POOL;
 
+    const tPool = Date.now();
     const items = await fetchPool(pool);
+    mark('pool', tPool);
     if (!items.length) throw new Error('TMDB pool returned no usable items');
 
     const index = pickIndexAvoidingRepeat(items);
     const item = items[index];
     lastPickedId = item.id;
 
-    const [backdropBuffer, logoUrl] = await Promise.all([
-      fetchBuffer(backdropUrl(item.backdropPath, BACKDROP_SIZE)),
-      SHOW_LOGO ? fetchLogo(item.mediaType, item.id).catch(() => null) : Promise.resolve(null),
-    ]);
+    // Backdrop download and the logo lookup+download chain run fully in
+    // parallel, not just the initial metadata call. Previously the logo
+    // image bytes were only fetched *after* Promise.all-ing the backdrop
+    // fetch with the logo URL lookup — which meant the (usually small,
+    // often cache-hit) logo work couldn't overlap with the (usually larger,
+    // slower) backdrop download at all once the URL lookup itself resolved
+    // early. Chaining it into one promise lets it run alongside the
+    // backdrop fetch the whole time instead of starting after. Doesn't
+    // reduce total *work*, just removes an unnecessary serialization point
+    // — safe, no visual/behavioral change.
+    const tImages = Date.now();
+    const backdropPromise = fetchBuffer(backdropUrl(item.backdropPath, BACKDROP_SIZE));
+    const logoPromise = SHOW_LOGO
+      ? fetchLogo(item.mediaType, item.id)
+          .catch(() => null)
+          .then((url) => (url ? fetchBuffer(url).catch(() => null) : null))
+      : Promise.resolve(null);
 
-    let logoBuffer = logoUrl ? await fetchBuffer(logoUrl).catch(() => null) : null;
+    const [backdropBuffer, fetchedLogoBuffer] = await Promise.all([backdropPromise, logoPromise]);
+    mark('images', tImages);
+
+    let logoBuffer = fetchedLogoBuffer;
     if (SHOW_LOGO && !logoBuffer) {
+      const tTextLogo = Date.now();
       logoBuffer = await renderTextLogo(item.title).catch(() => null);
+      mark('textLogo', tTextLogo);
     }
 
+    const tCompose = Date.now();
     const image = await composeBackground(backdropBuffer, logoBuffer, {
       width: BG_WIDTH,
       height: BG_HEIGHT,
@@ -133,9 +185,12 @@ module.exports = async (req, res) => {
       jpegQuality: JPEG_QUALITY,
       blurSigma: BLUR_SIGMA,
       sharpen: SHARPEN,
+      dither: DITHER,
       genreNames: SHOW_TAGS ? item.genreNames : [],
       trendRank: SHOW_TAGS ? item.trendRank : null,
     });
+    mark('compose', tCompose);
+    mark('total', t0);
 
     res.setHeader('Content-Type', 'image/jpeg');
     // No caching anywhere in the chain: every real request (i.e. every time
@@ -146,6 +201,10 @@ module.exports = async (req, res) => {
     res.setHeader('Cache-Control', 'no-store, must-revalidate');
     res.setHeader('X-Nuvio-BG-Title', item.title || '');
     res.setHeader('X-Nuvio-BG-Genres', (item.genreNames || []).join(', '));
+    res.setHeader(
+      'X-Nuvio-BG-Timing',
+      Object.entries(timing).map(([k, v]) => `${k}=${v}ms`).join(';')
+    );
     res.status(200).send(image);
   } catch (err) {
     console.error('background generation failed, serving fallback:', err);
