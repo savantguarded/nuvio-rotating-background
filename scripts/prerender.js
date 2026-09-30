@@ -16,6 +16,30 @@ const COUNT = Number(process.env.PRERENDER_COUNT || 30);
 const MIN_OK = Math.min(10, COUNT);
 const CONCURRENCY = 4;
 
+// Recency weighting (Sept 30, third pass): classics still appear, just
+// rarely. Weight by age of the release / first air date. Titles with no
+// date get the middle weight.
+const DAY_MS = 86400000;
+function recencyWeight(item, now = Date.now()) {
+  const t = Date.parse(item.releaseDate || '');
+  if (!Number.isFinite(t)) return 1;
+  const years = (now - t) / (365 * DAY_MS);
+  if (years <= 1) return 4;
+  if (years <= 3) return 2.5;
+  if (years <= 6) return 1;
+  if (years <= 12) return 0.35;
+  return 0.15;
+}
+
+// Weighted sample without replacement (Efraimidis-Spirakis keys).
+function weightedSample(items, n, weight) {
+  return items
+    .map((it) => ({ it, key: Math.pow(Math.random(), 1 / Math.max(weight(it), 1e-6)) }))
+    .sort((a, b) => b.key - a.key)
+    .slice(0, n)
+    .map((x) => x.it);
+}
+
 function shuffle(arr) {
   const a = arr.slice();
   for (let i = a.length - 1; i > 0; i--) {
@@ -34,7 +58,7 @@ async function main() {
   if (!pool.length) throw new Error('empty pool');
   // Oversample so a few failed renders (no backdrop, fetch error) still
   // leave a full set.
-  const candidates = shuffle(pool).slice(0, Math.min(pool.length, COUNT + 8));
+  const candidates = shuffle(weightedSample(pool, Math.min(pool.length, COUNT + 8), (it) => recencyWeight(it)));
   const cfg = envConfig();
   const results = [];
   let next = 0;
@@ -85,7 +109,8 @@ async function main() {
   console.log(`\nwrote ${results.length} backgrounds + manifest to ${outDir}`);
 }
 
-main().catch((err) => {
+if (require.main !== module) module.exports = { recencyWeight, weightedSample };
+else main().catch((err) => {
   console.error(err);
   process.exit(1);
 });
