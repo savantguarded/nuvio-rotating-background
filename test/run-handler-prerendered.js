@@ -64,9 +64,20 @@ async function main() {
   if (a.headers['Cache-Control'] !== 'no-store, must-revalidate') throw new Error('response must not be cached');
   if (a.headers['X-Nuvio-BG-Tags'] !== 'Trending Now | 2026 | Action') throw new Error('tags header wrong: ' + a.headers['X-Nuvio-BG-Tags']);
 
+  // The whole set gets preloaded after the first manifest load.
+  await new Promise((r) => setTimeout(r, 50));
+  const imageFetches = new Set(fetched.filter((u) => u.includes('/bg/')).map((u) => u.split('?')[0]));
+  if (imageFetches.size !== manifest.items.length) throw new Error(`expected all ${manifest.items.length} images preloaded, got ${imageFetches.size}`);
+
+  // ?redirect=1 test switch: 302 to the CDN copy, still never cached.
+  const r = await call(0.5, { redirect: '1' });
+  if (r.statusCode !== 302 || !/\.github\.io\/.*\/bg\/\d+\.jpg\?v=/.test(r.headers.Location || '')) throw new Error('bad redirect: ' + r.statusCode + ' ' + r.headers.Location);
+  if (r.headers['Cache-Control'] !== 'no-store, must-revalidate') throw new Error('redirect must not be cacheable');
+
   // Third was just served, so 0.99 would repeat it and steps to First,
   // which was already fetched once: its bytes must now come from memory.
   const before = fetched.length;
+  await call(0.99); // resets lastPicked after the redirect call
   const c = await call(0.99);
   if (c.headers['X-Nuvio-BG-Title'] !== 'First') throw new Error('expected repeat-avoidance to step to First');
   if (!/\(mem\)/.test(c.headers['X-Nuvio-BG-Timing'])) throw new Error('expected an in-memory image hit');

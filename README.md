@@ -18,7 +18,9 @@ One-time setup: repo secret `TMDB_API_KEY` (Settings → Secrets and variables �
 
 Tag row (Sept 30 redesign): Manrope font (bundled, OFL), a per-title highlight label from `lib/tags.js` (New Series, New Release, Coming Soon, Trending Now, Classic, Modern Classic, Highly Rated, Popular This Week, Fan Favourite; never a number), a meta line of year · Series · two genres, and an accent colour taken from the clearlogo, else the backdrop's dominant hue, else gold.
 
-Dark-area quality (Sept 30): JPEG now encodes at quality 88 with 4:4:4 chroma and mozjpeg's flat quantisation table. The "pixelated" dark areas were 4:2:0 chroma subsampling smearing colour into 16x16 blotches in near-black regions, plus the default table discarding shadow detail first; a TV's shadow boost makes both obvious. Images are now ~170-350KB instead of ~90-280KB. The ordered dither stays on: with chroma fixed, it measurably smooths the remaining near-black banding.
+Dark-area quality (Sept 30, plus a second pass: the resize step no longer re-saves an intermediate lossy JPEG): JPEG now encodes at quality 88 with 4:4:4 chroma and mozjpeg's flat quantisation table. The "pixelated" dark areas were 4:2:0 chroma subsampling smearing colour into 16x16 blotches in near-black regions, plus the default table discarding shadow detail first; a TV's shadow boost makes both obvious. Images are now ~170-350KB instead of ~90-280KB. The ordered dither stays on: with chroma fixed, it measurably smooths the remaining near-black banding.
+
+Second pass (Sept 30): one TMDB details call per title (images appended) picks the best-voted textless, full-width 16:9 backdrop (no burned-in titles duplicating the logo), the logo, and label data: New Season, New Episodes, Returning Soon, Final Season, New Limited Series, plus seasons count or runtime in the meta line. The endpoint preloads the whole set into memory when it sees a new manifest. `?redirect=1` is a TV test switch that 302s to the CDN copy instead of relaying bytes.
 
 The sections below are the earlier history, kept for context. Where they say "renders on every request", that described the pre-Sept 30 design.
 

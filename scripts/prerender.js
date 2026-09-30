@@ -43,10 +43,10 @@ async function main() {
     while (results.length < COUNT && next < candidates.length) {
       const item = candidates[next++];
       try {
-        const { image, tags, timing } = await renderItem(item, cfg);
+        const { image, tags, timing, backdropPath } = await renderItem(item, cfg);
         if (results.length >= COUNT) return;
         const file = `bg/${String(results.length).padStart(2, '0')}.jpg`;
-        results.push({ file, item, tags, bytes: image.length });
+        results.push({ file, item, tags, bytes: image.length, backdropPath });
         fs.writeFileSync(path.join(outDir, file), image);
         console.log(`${file}  ${item.title}  [${[tags.highlight, ...tags.meta].filter(Boolean).join(' | ')}]  ${Math.round(image.length / 1024)}KB compose=${timing.compose}ms`);
       } catch (err) {
@@ -70,6 +70,7 @@ async function main() {
       tmdbId: r.item.id,
       highlight: r.tags.highlight,
       meta: r.tags.meta,
+      backdrop: r.backdropPath,
       bytes: r.bytes,
     })),
   };

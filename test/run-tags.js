@@ -16,9 +16,34 @@ const cases = [
   [{ mediaType: 'movie', releaseDate: '2021-05-05', voteAverage: 6.1, voteCount: 900, genreNames: [] }, null, ['2021']],
 ];
 
+// With per-title details (lib/tmdb.js fetchTitleExtras).
+const S = (n, d) => ({ number: n, airDate: d });
+const detailCases = [
+  [{ mediaType: 'tv', releaseDate: '2019-01-01', genreNames: ['Drama'] },
+    { status: 'Returning Series', numberOfSeasons: 3, seasons: [S(1, '2019-01-01'), S(2, '2022-01-01'), S(3, '2026-09-12')],
+      lastEpisode: { airDate: '2026-09-26', season: 3 }, nextEpisode: { airDate: '2026-10-03', season: 3, episode: 4 } },
+    'New Season', ['2019', '3 Seasons', 'Drama']],
+  [{ mediaType: 'tv', releaseDate: '2019-01-01', genreNames: ['Drama'] },
+    { status: 'Ended', numberOfSeasons: 4, seasons: [S(1, '2019-01-01'), S(4, '2026-09-01')], lastEpisode: { airDate: '2026-09-29', season: 4 }, nextEpisode: null },
+    'Final Season', ['2019', '4 Seasons', 'Drama']],
+  [{ mediaType: 'tv', releaseDate: '2019-01-01', genreNames: ['Comedy'] },
+    { status: 'Returning Series', numberOfSeasons: 2, seasons: [S(1, '2019-01-01'), S(2, '2021-01-01')], lastEpisode: { airDate: '2021-03-01', season: 2 },
+      nextEpisode: { airDate: '2026-10-20', season: 3, episode: 1 } },
+    'Returning Soon', ['2019', '2 Seasons', 'Comedy']],
+  [{ mediaType: 'tv', releaseDate: '2025-01-01', genreNames: ['Crime'], trendRank: { rank: 2 } },
+    { status: 'Returning Series', numberOfSeasons: 1, seasons: [S(1, '2025-01-01')], lastEpisode: { airDate: '2026-09-27', season: 1 }, nextEpisode: { airDate: '2026-10-04', season: 1, episode: 9 } },
+    'New Episodes', ['2025', '1 Season', 'Crime']],
+  [{ mediaType: 'tv', releaseDate: '2026-09-01', genreNames: ['Drama', 'Crime'] },
+    { status: 'Ended', type: 'Miniseries', numberOfSeasons: 1, seasons: [S(1, '2026-09-01')] },
+    'New Limited Series', ['2026', 'Limited Series', 'Drama', 'Crime']],
+  [{ mediaType: 'movie', releaseDate: '2018-04-25', voteAverage: 8.2, voteCount: 30000, genreNames: ['Adventure', 'Action'] },
+    { runtime: 149 }, 'Highly Rated', ['2018', '2h 29m', 'Adventure', 'Action']],
+];
+for (const [item, details, h, m] of detailCases) cases.push([item, h, m, details]);
+
 let failures = 0;
-for (const [item, wantHighlight, wantMeta] of cases) {
-  const got = buildTagContent(item, NOW);
+for (const [item, wantHighlight, wantMeta, details] of cases) {
+  const got = buildTagContent(item, NOW, details || null);
   const ok = got.highlight === wantHighlight && JSON.stringify(got.meta) === JSON.stringify(wantMeta);
   if (/\d/.test(got.highlight || '')) { console.error('highlight contains a number:', got.highlight); failures++; }
   if (!ok) {

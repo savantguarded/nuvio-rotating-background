@@ -26,7 +26,7 @@ const PRERENDER_ENABLED = process.env.PRERENDER_BASE !== 'off';
 const POOL = process.env.POOL || 'trending';
 
 const MANIFEST_TTL_MS = 5 * 60 * 1000;
-const MAX_CACHED_IMAGES = 40;
+const MAX_CACHED_IMAGES = 64; // a full set plus room for the next one
 
 let manifestCache = null; // { data, fetchedAt }
 const imageCache = new Map(); // `${generatedAt}/${file}` -> Buffer
@@ -41,7 +41,9 @@ async function getManifest() {
     if (!res.ok) throw new Error(`manifest ${res.status}`);
     const data = await res.json();
     if (!Array.isArray(data.items) || !data.items.length) throw new Error('manifest has no items');
+    const isNewSet = !manifestCache || manifestCache.data.generatedAt !== data.generatedAt;
     manifestCache = { data, fetchedAt: Date.now() };
+    if (isNewSet) preloadAll(data);
     return data;
   } catch (err) {
     // Serve the last good manifest rather than dropping to a slow live
@@ -71,6 +73,22 @@ async function getImage(manifest, entry) {
   return { buf, cached: false };
 }
 
+// Pull the whole set into memory as soon as a new manifest is seen, so
+// nearly every open is served from memory instead of fetching from Pages.
+// Not awaited: the current request doesn't wait on it. ~30 images x
+// ~250KB is ~8MB, well inside the function's memory. The keep-warm ping
+// (every 5 min) is usually what triggers this, not a real app open.
+function preloadAll(manifest) {
+  const queue = manifest.items.slice();
+  const worker = async () => {
+    while (queue.length) {
+      const entry = queue.shift();
+      await getImage(manifest, entry).catch(() => {});
+    }
+  };
+  Promise.all([worker(), worker(), worker(), worker()]).catch(() => {});
+}
+
 function sendImage(res, image, headers) {
   res.setHeader('Content-Type', 'image/jpeg');
   // Never cached anywhere, so every app open gets a new random pick.
@@ -79,13 +97,25 @@ function sendImage(res, image, headers) {
   res.status(200).send(image);
 }
 
-async function servePrerendered(res, t0) {
+async function servePrerendered(req, res, t0) {
   const tManifest = Date.now();
   const manifest = await getManifest();
   const manifestMs = Date.now() - tManifest;
 
   const entry = pickAvoidingRepeat(manifest.items, (e) => e.file, lastPicked);
   lastPicked = entry.file;
+
+  // TV test switch: ?redirect=1 sends Nuvio straight to the image on the
+  // Pages CDN instead of relaying the bytes through this function. Only
+  // worth making the default if Nuvio follows redirects without caching
+  // the target URL (i.e. still shows a new image on every open).
+  if (req.query && req.query.redirect === '1') {
+    res.setHeader('Cache-Control', 'no-store, must-revalidate');
+    res.setHeader('X-Nuvio-BG-Source', 'prerendered-redirect');
+    res.setHeader('X-Nuvio-BG-Title', entry.title || '');
+    res.setHeader('Location', `${PRERENDER_BASE}/${entry.file}?v=${encodeURIComponent(manifest.generatedAt)}`);
+    return res.status(302).send('');
+  }
 
   const tImage = Date.now();
   const { buf, cached } = await getImage(manifest, entry);
@@ -130,7 +160,7 @@ module.exports = async (req, res) => {
 
   if (PRERENDER_ENABLED && !forceLive) {
     try {
-      return await servePrerendered(res, t0);
+      return await servePrerendered(req, res, t0);
     } catch (err) {
       console.error('pre-rendered set unavailable, rendering live:', err.message);
     }
