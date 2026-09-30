@@ -14,6 +14,9 @@ const cases = [
   [{ mediaType: 'movie', releaseDate: '2024-02-27', voteAverage: 8.1, voteCount: 7000, genreNames: ['Science Fiction', 'Adventure'] }, 'Highly Rated', ['2024', 'Sci-Fi', 'Adventure']],
   [{ mediaType: 'tv', releaseDate: '2023-07-23', trendRank: { rank: 14 }, voteAverage: 7.0, voteCount: 400, genreNames: ['Drama'] }, 'Popular This Week', ['2023', 'Series', 'Drama']],
   [{ mediaType: 'movie', releaseDate: '2021-05-05', voteAverage: 6.1, voteCount: 900, genreNames: [] }, null, ['2021']],
+  [{ mediaType: 'movie', releaseDate: '2021-05-05', voteAverage: 6.1, voteCount: 900, genreNames: ['Horror', 'Mystery'] }, 'Spine-Chilling', ['2021', 'Horror', 'Mystery']],
+  [{ mediaType: 'movie', releaseDate: '2025-06-01', voteAverage: 7.0, voteCount: 2400, genreNames: ['Animation'] }, 'Popular Now', ['2025', 'Animation']],
+  [{ mediaType: 'tv', releaseDate: '2025-06-01', voteAverage: 7.0, voteCount: 120, genreNames: ['Sci-Fi & Fantasy'] }, 'Mind-Bending', ['2025', 'Series', 'Sci-Fi']],
 ];
 
 // With per-title details (lib/tmdb.js fetchTitleExtras).
@@ -38,6 +41,11 @@ const detailCases = [
     'New Limited Series', ['2026', 'Limited Series', 'Drama', 'Crime']],
   [{ mediaType: 'movie', releaseDate: '2018-04-25', voteAverage: 8.2, voteCount: 30000, genreNames: ['Adventure', 'Action'] },
     { runtime: 149 }, 'Highly Rated', ['2018', '2h 29m', 'Adventure', 'Action']],
+  [{ mediaType: 'movie', releaseDate: '2025-11-26', voteAverage: 7.4, voteCount: 1900, genreNames: ['Animation', 'Comedy'] },
+    { runtime: 108, revenue: 1.7e9 }, 'Box Office Hit', ['2025', '1h 48m', 'Animation', 'Comedy']],
+  [{ mediaType: 'tv', releaseDate: '2010-09-20', voteAverage: 7.6, voteCount: 1600, genreNames: ['Crime', 'Drama'] },
+    { status: 'Ended', numberOfSeasons: 10, seasons: [S(1, '2010-09-20'), S(10, '2019-09-27')], lastEpisode: { airDate: '2020-04-03', season: 10 } },
+    'Binge-Worthy', ['2010', '10 Seasons', 'Crime', 'Drama']],
 ];
 for (const [item, details, h, m] of detailCases) cases.push([item, h, m, details]);
 
