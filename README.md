@@ -2,7 +2,25 @@
 
 A serverless endpoint that generates a single stable image URL. Every time something actually fetches that URL, it picks a random title from TMDB's trending pool, darkens the backdrop with a gradient overlay, and stamps the title's logo bottom-right so it stays clear of Nuvio's own profile list on the left.
 
-Point Nuvio's custom profile background field at this one URL. You never change the URL again; a new image renders on every request.
+Point Nuvio's custom profile background field at this one URL. You never change the URL again; every app open gets a different image.
+
+## How it works now (Sept 30, 2026)
+
+Images are **pre-rendered**, not rendered per request:
+
+1. `.github/workflows/prerender.yml` runs hourly on GitHub Actions. `scripts/prerender.js` pulls the TMDB pool, renders ~30 backgrounds (`lib/render.js` → `lib/compose.js`) and publishes them to GitHub Pages with a `manifest.json`.
+2. `api/background.js` (Vercel, pinned to London `lhr1`, closest region to Lagos) reads the manifest, picks one at random (never the same twice in a row) and streams it. Manifest and image bytes are cached per warm instance.
+3. If the published set is unreachable, it falls back to the old live render, then to a plain gradient. `?live=1` forces a live render.
+
+Response headers for spot checks: `X-Nuvio-BG-Source` (`prerendered` / `live` / `fallback`), `X-Nuvio-BG-Title`, `X-Nuvio-BG-Tags`, `X-Nuvio-BG-Generated`, `X-Nuvio-BG-Timing`.
+
+One-time setup: repo secret `TMDB_API_KEY` (Settings → Secrets and variables → Actions) and Pages source set to "GitHub Actions" (Settings → Pages).
+
+Tag row (Sept 30 redesign): Manrope font (bundled, OFL), a per-title highlight label from `lib/tags.js` (New Series, New Release, Coming Soon, Trending Now, Classic, Modern Classic, Highly Rated, Popular This Week, Fan Favourite; never a number), a meta line of year · Series · two genres, and an accent colour taken from the clearlogo, else the backdrop's dominant hue, else gold.
+
+Dark-area quality (Sept 30): JPEG now encodes at quality 88 with 4:4:4 chroma and mozjpeg's flat quantisation table. The "pixelated" dark areas were 4:2:0 chroma subsampling smearing colour into 16x16 blotches in near-black regions, plus the default table discarding shadow detail first; a TV's shadow boost makes both obvious. Images are now ~170-350KB instead of ~90-280KB. The ordered dither stays on: with chroma fixed, it measurably smooths the remaining near-black banding.
+
+The sections below are the earlier history, kept for context. Where they say "renders on every request", that described the pre-Sept 30 design.
 
 ## Why this shape
 

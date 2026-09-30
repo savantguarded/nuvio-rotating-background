@@ -1,5 +1,9 @@
 name: Keep endpoint warm
 
+# Sept 30: since images are now pre-rendered (prerender.yml), this mainly
+# keeps a warm instance holding the manifest and image bytes in memory.
+# The notes below describe the original live-render reason for it.
+#
 # Vercel Hobby's built-in Cron is capped at once per day (any more frequent
 # schedule fails at deploy time), which is no use for keeping a Lambda
 # instance warm. This runs from GitHub Actions instead — a plain HTTP GET

@@ -1,4 +1,8 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "regions": [
+    "lhr1"
+  ],
   "functions": {
     "api/background.js": {
       "maxDuration": 10,
